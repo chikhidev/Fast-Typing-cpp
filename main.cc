@@ -6,6 +6,7 @@
 #include <climits>
 #include <string.h>
 #include <vector>
+#include <chrono>
 
 #define success 0
 #define error 1
@@ -18,7 +19,9 @@
 #define GREEN "\e[0;32m"
 #define YELLOW "\e[0;33m"
 
-
+#define DATA_FILE "random_phrases"
+#define TOTAL_ROUNDS 1
+#define LOG false
 
 struct bools
 {
@@ -33,18 +36,10 @@ struct score_tracking
     int lines;
     unsigned int score;
     size_t total_words;
+    float total_time_took;
+    std::vector<std::string> logs;
 };
 
-
-size_t
-string_len
-(const char *str)
-{
-    int l = 0;
-    while (str[l] && str[l] != '\n')
-        l++;
-    return l;
-}
 
 
 // void
@@ -132,25 +127,34 @@ proccess_single_word
 
     diff << " ";
 
+    if (LOG)
+    {
+        std::stringstream log;
+        log << correct << " correct in word: " << expected;
+        track->logs.push_back(log.str());
+    }
+
     return correct;
 }
 
 
 void
 take_user_input
-(struct bools *bools_, struct score_tracking *track, const char *line)
+(struct bools *bools_, struct score_tracking *track, const std::string& line)
 {
-    size_t line_len = string_len(line);
+    size_t line_len = line.size();
     std::stringstream diff;
 
     std::cout << YELLOW << line << RESET;
     if (line[line_len - 1] != '\n')
         std::cout << std::endl;
+    else
+        line_len--;
 
     std::string input;
-    std::clock_t line_start_typing_time = std::clock();
+    time_t line_start_typing_time = time(NULL);
     getline(std::cin, input);
-    std::clock_t line_end_typing_time = std::clock();
+    time_t line_end_typing_time = time(NULL);
 
     if (input.size() == 0)
     {
@@ -169,6 +173,8 @@ take_user_input
     while (std::getline(line_stream, word, ' '))
         expected_words.push_back(word);
 
+    line_len -= (expected_words.size() - 1);
+
     std::vector<std::string> user_words;
 
     line_stream.clear();
@@ -179,33 +185,46 @@ take_user_input
     size_t correct_sum = 0;
     while (std::getline(line_stream, word, ' '))
     {
-        correct_sum += proccess_single_word(bools_, track, expected_words[i], word, diff);
-        if (correct_sum == word.size())
-            track->total_words++;
-        i++;
-    } 
+        size_t got = proccess_single_word(bools_, track, expected_words[i], word, diff);
+        correct_sum += got;
 
-    double line_took_time = (double)(line_end_typing_time - line_start_typing_time) / CLOCKS_PER_SEC;
+        size_t expected_len = expected_words[i].size();
+        expected_len -= (expected_words[i].c_str()[expected_len - 1] == '\n');
+
+        if (got == expected_len)
+            track->total_words++;
+       
+        if (LOG)
+        {
+            std::stringstream ss;
+            ss << "Expected " << word.size() << " for " << word;
+            track->logs.push_back(ss.str());
+        }
+
+        i++;
+    }
+
+    double line_took_time = (line_end_typing_time - line_start_typing_time);
 
     system("clear");
 
     diff << RESET;
     std::cout << line << std::endl;
     std::cout << diff.str() << std::endl;
-    std::cout << "Correct: " << correct_sum << std::endl;
-    std::cout << "Time took: " << line_took_time << std::endl;
+    std::cout << "Correct: " << correct_sum << "/" << line_len << std::endl;
+    std::cout << "Time took: " << line_took_time << " s" << std::endl;
     std::cout << std::endl;
     
     track->lines++;
+    track->total_time_took += line_took_time;
 }
 
 int
 main
-(int ac,char **av)
+()
 {
-    if (ac != 2) return error;
 
-    FILE *input = fopen(av[1], "r");
+    FILE *input = fopen(DATA_FILE, "r");
     if (!input) return error;
 
     std::stringstream file_content("");
@@ -221,14 +240,35 @@ main
 
     system("clear");
 
+    size_t lines_count = 0;
+    std::vector<std::string> lines_store;
+
     while (getline(&line, &line_len, input) > 0) {
+        lines_store.push_back(line);
+        lines_count++;
+    }
+
+    std::srand(time(NULL));
+
+    for (int i = 0; i < TOTAL_ROUNDS; i++)
+    {
+        std::cout << "Preparing a phrase..." << std::endl;
+        size_t random_idx = std::rand() % lines_count;
         if (bools_.stop) break;
-        take_user_input(&bools_, &track, line);
+        take_user_input(&bools_, &track, lines_store[random_idx]);
     }
 
     std::cout << "Summary:-------------------" << std::endl;
     std::cout << "N of lines:\t" << track.lines << std::endl;
     std::cout << "Total words:\t" << track.total_words << std::endl;
+
+    float time_to_min = track.total_time_took / 60.00f;
+    std::cout << "Total time:\t" << time_to_min << " min" << std::endl;
+    float wpm = track.total_words / time_to_min;
+    std::cout << "Wpm:\t\t" << YELLOW << wpm << std::endl;
+
+    for (size_t i = 0; LOG && i < track.logs.size(); i++)
+        std::cout << track.logs[i] << std::endl;
 
     return success;
 }
