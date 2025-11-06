@@ -1,3 +1,3 @@
 
 all:
-	c++ -Wall -Wextra -Werror main.cc
+	c++ -Wall -Wextra -Werror main.cc -o typetest

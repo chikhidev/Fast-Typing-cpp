@@ -7,6 +7,7 @@
 #include <string.h>
 #include <vector>
 #include <chrono>
+#include <iomanip>
 
 #define success 0
 #define error 1
@@ -20,7 +21,8 @@
 #define YELLOW "\e[0;33m"
 
 #define DATA_FILE "random_phrases"
-#define TOTAL_ROUNDS 1
+#define TRACK_FILE "tracking"
+#define TOTAL_ROUNDS 10
 #define LOG false
 
 struct bools
@@ -40,41 +42,6 @@ struct score_tracking
     std::vector<std::string> logs;
 };
 
-
-
-// void
-// print_current_summary
-// (struct bools *bools_, struct score_tracking *track, double& took_line_time, double& time_advencement)
-// {
-//     (void)bools_;
-//     system("clear");
-//     if (track->score == 0) return;
-
-//     double score_percentage = (double(track->score) / MAX_SCORE) * 100;
-
-//     size_t i = 0;
-//     for (; i < 100; i++)
-//     {
-//         if (i < score_percentage)
-//             std::cout << YELLOW << "-";
-//         else
-//             std::cout << RESET << " ";
-//     }
-//     std::cout << " " << score_percentage << "%" << RESET << std::endl;
-
-//     if (track->last_line_time_taken != 0 && took_line_time > track->last_line_time_taken)
-//     {
-//         time_advencement = double(took_line_time / track->last_line_time_taken) * 100;
-//         std::cout << RED << "Speed downgrade from last time: " << time_advencement << "%" << RESET << std::endl;
-//     }
-//     else if (track->last_time_correct > 0)
-//     {
-//         time_advencement = double(track->last_line_time_taken / took_line_time) * 100;
-//         std::cout << GREEN << "Speed upgrade from last time: " << time_advencement << "%" << RESET << std::endl;
-//     }
-
-
-// }
 
 
 
@@ -135,6 +102,45 @@ proccess_single_word
     }
 
     return correct;
+}
+
+
+void
+print_summary_and_save
+(struct score_tracking *track)
+{
+    std::stringstream summary;
+    time_t now = time(NULL);
+    std::tm* local = std::localtime(&now);
+
+    if (local)
+        summary << "Summary <" << std::put_time(local, "%Y/%m/%d %H:%M:%S") << ">" << std::endl;
+    else
+        summary << "Summary:" << std::endl;
+
+    summary << "N of lines:\t" << track->lines << std::endl;
+    summary << "Total words:\t" << track->total_words << std::endl;
+
+    float time_to_min = track->total_time_took / 60.00f;
+    summary << "Total time:\t" << time_to_min << " min" << std::endl;
+
+    float wpm = track->total_words / time_to_min;
+
+    summary << "Wpm:\t\t" << wpm  << "\n\n" << std::endl;
+
+    std::cout << summary.str();
+
+    FILE *tracking_file = fopen(TRACK_FILE, "a");
+    if (!tracking_file)
+    {
+        std::cout << RED << "FAILED TO OPEN tracking file!" << std::endl;
+        return;
+    }
+
+    if (fwrite(summary.str().c_str(), summary.str().size(), 1, tracking_file) < 0)
+        std::cerr << "Failed to write summary in " << TRACK_FILE << std::endl;
+
+    fclose(tracking_file);
 }
 
 
@@ -248,6 +254,8 @@ main
         lines_count++;
     }
 
+    fclose(input);
+
     std::srand(time(NULL));
 
     for (int i = 0; i < TOTAL_ROUNDS; i++)
@@ -258,14 +266,7 @@ main
         take_user_input(&bools_, &track, lines_store[random_idx]);
     }
 
-    std::cout << "Summary:-------------------" << std::endl;
-    std::cout << "N of lines:\t" << track.lines << std::endl;
-    std::cout << "Total words:\t" << track.total_words << std::endl;
-
-    float time_to_min = track.total_time_took / 60.00f;
-    std::cout << "Total time:\t" << time_to_min << " min" << std::endl;
-    float wpm = track.total_words / time_to_min;
-    std::cout << "Wpm:\t\t" << YELLOW << wpm << std::endl;
+    print_summary_and_save(&track);
 
     for (size_t i = 0; LOG && i < track.logs.size(); i++)
         std::cout << track.logs[i] << std::endl;
